@@ -1,0 +1,25 @@
+# 构建输出
+/target
+
+# 音视频：参考素材、导出和录制的结果都不入库
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.wav
+*.mp3
+*.flac
+*.m4a
+*.ogg
+/out
+
+# Claude Code 的本机设置
+.claude/settings.local.json
+
+# 编辑器与系统文件
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+Desktop.ini
+.DS_Store

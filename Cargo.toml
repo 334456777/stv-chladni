@@ -1,0 +1,48 @@
+[package]
+name = "stv"
+version = "0.1.0"
+edition = "2021"
+description = "stv (speak to video) — 把声音变成克拉尼沙粒振动纹路的 GPU 桌面程序"
+license = "MIT"
+repository = "https://github.com/334456777/stv-chladni"
+
+[[bin]]
+name = "stv"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.31.1", default-features = false, features = ["wgpu", "default_fonts", "persistence"] }
+egui = "0.31.1"
+# 与 egui-wgpu 使用同一版本，只为开启 Windows 上的 DX12 后端
+wgpu = { version = "24.0.5", default-features = false, features = ["dx12"] }
+cpal = "0.15.3"
+realfft = "3.4.0"
+rfd = "0.15.3"
+clap = { version = "4.5", features = ["derive"] }
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+bytemuck = { version = "1.21", features = ["derive"] }
+pollster = "0.4.0"
+log = "0.4"
+env_logger = "0.11"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_Console"] }
+
+# gpu-allocator 0.27 允许 windows 0.53～0.58，cargo 可能让它复用 cpal 带来的 0.54，
+# 与 wgpu-hal 使用的 0.58 类型不兼容，DX12 后端会编译失败。
+# vendor/gpu-allocator 是原版 0.27.0，只把 windows 依赖固定为 0.58。
+[patch.crates-io]
+gpu-allocator = { path = "vendor/gpu-allocator" }
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+opt-level = 3
+lto = "thin"
