@@ -1,4 +1,8 @@
 //! stv (speak to video)：用声音驱动 GPU 沙粒模拟，生成克拉尼振动纹路的实时画面或视频。
+//!
+//! Windows 上 stv.exe 是窗口程序，双击不会弹出终端；发布包里的 stv.com 是同一程序的控制台版本
+//! （scripts/package.ps1 只改了 PE 头的子系统），终端里输入 `stv` 时按 PATHEXT 先找到它。
+#![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
 
 mod analysis;
 mod audio;
@@ -26,11 +30,25 @@ use crate::params::{Params, PlateShape, Preset};
     name = "stv",
     version,
     about = "stv (speak to video)：把声音变成沙粒在振动板上形成的克拉尼纹路",
-    long_about = None
+    long_about = None,
+    args_conflicts_with_subcommands = true
 )]
 struct Cli {
+    /// 打开界面并播放这个音频 / 视频文件（把文件拖到 stv.exe 上、"打开方式"选 stv 时就是这样启动的）
+    #[arg(value_parser = existing_file)]
+    input: Option<PathBuf>,
     #[command(subcommand)]
     cmd: Option<Cmd>,
+}
+
+/// 拼错的子命令也会落到 `input` 上，不是已有文件就报错，而不是打开界面。
+fn existing_file(s: &str) -> Result<PathBuf, String> {
+    let p = PathBuf::from(s);
+    if p.is_file() {
+        Ok(p)
+    } else {
+        Err("既不是已有的文件，也不是子命令（见 stv --help）".into())
+    }
 }
 
 #[derive(Subcommand)]
@@ -104,14 +122,19 @@ struct RenderArgs {
 }
 
 fn main() {
+    attach_parent_console();
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn,wgpu_core=error,wgpu_hal=error,naga=warn"))
         .init();
     let cli = Cli::parse();
+    let gui_mode = matches!(cli.cmd, None | Some(Cmd::Gui { .. }));
+    if gui_mode {
+        detach_console_if_owned();
+    }
     let result = match cli.cmd {
-        None => {
-            detach_console_if_owned();
-            gui::run(gui::Launch::default())
-        }
+        None => gui::run(gui::Launch {
+            open: cli.input,
+            ..Default::default()
+        }),
         Some(Cmd::Gui { input, config, volume, sprinkle }) => config
             .as_deref()
             .map(gui::load_params)
@@ -128,6 +151,14 @@ fn main() {
     };
     if let Err(e) = result {
         eprintln!("错误：{e:#}");
+        if gui_mode {
+            // 双击启动时没有终端，只能弹窗告诉用户
+            rfd::MessageDialog::new()
+                .set_level(rfd::MessageLevel::Error)
+                .set_title("stv")
+                .set_description(format!("{e:#}"))
+                .show();
+        }
         std::process::exit(1);
     }
 }
@@ -214,7 +245,19 @@ fn write_config(output: Option<PathBuf>) -> Result<()> {
     Ok(())
 }
 
-/// 双击启动（控制台只属于本进程）时隐藏控制台窗口；从终端启动则保留输出。
+/// 在终端里直接运行窗口程序 stv.exe 时本来没有控制台，接到终端上，输出才看得见。
+/// 终端不会等窗口程序结束，所以命令行用法应走 stv.com。
+fn attach_parent_console() {
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::System::Console::{AttachConsole, GetConsoleWindow, ATTACH_PARENT_PROCESS};
+        if GetConsoleWindow().is_null() {
+            AttachConsole(ATTACH_PARENT_PROCESS);
+        }
+    }
+}
+
+/// 双击控制台版 stv.com（控制台只属于本进程）时隐藏它自带的控制台窗口；从终端启动则保留输出。
 fn detach_console_if_owned() {
     #[cfg(windows)]
     unsafe {

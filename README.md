@@ -27,8 +27,12 @@
 
 ## 下载
 
-Windows x64 版本见 [Releases](https://github.com/334456777/stv-chladni/releases)：解压后双击 `stv.exe`。
+Windows 10 / 11 x64 版本见 [Releases](https://github.com/334456777/stv-chladni/releases)：解压后双击 `stv.exe`，
+也可以把音频 / 视频文件拖到 `stv.exe` 上直接打开。
 发布包自带 ffmpeg（`ffmpeg\` 文件夹），也已静态链接 VC++ 运行库，不用另装。
+
+`stv.exe` 是窗口程序，双击不会弹出终端；旁边的 `stv.com` 是同一程序的控制台版，供命令行使用：
+在终端里输入 `stv …` 时 Windows 先找到 `stv.com`，终端会等它结束并显示输出。
 
 ## 依赖
 
@@ -45,7 +49,11 @@ Windows x64 版本见 [Releases](https://github.com/334456777/stv-chladni/releas
 cargo build --release
 ```
 
-打 Windows 发布包（编译 release，并把 PATH 中的 ffmpeg 连同 DLL 和许可放进 `ffmpeg\`）：
+Windows 上构建时会给 exe 嵌入图标和版本信息，需要 Windows SDK 的 `rc.exe`
+（装 Visual Studio 生成工具时一般已带）。图标由 `scripts/make_icon.py` 生成。
+编译出的 stv.exe 是窗口程序，开发时用 `cargo run --release -- render …` 跑命令行（cargo 会等它结束）。
+
+打 Windows 发布包（编译 release，生成控制台版 `stv.com`，并把 PATH 中的 ffmpeg 连同 DLL 和许可放进 `ffmpeg\`）：
 
 ```bash
 pwsh -File scripts/package.ps1
@@ -61,7 +69,7 @@ pwsh -File scripts/package.ps1
 
 ```bash
 stv                  # 打开界面并开始监听默认麦克风
-stv gui song.mp3     # 打开界面并立即播放文件
+stv song.mp3         # 打开界面并立即播放文件（同 stv gui song.mp3）
 stv gui --config my.json --volume 0.5
 stv gui --sprinkle 1.2   # 撒沙动画时长 1.2 秒（0.1～5）
 ```
@@ -146,8 +154,11 @@ src/
   export.rs        无头导出（GPU → ffmpeg 管道）
   record.rs        实时录制（读回画面 → ffmpeg，可选混入声音）
   gui.rs           egui 界面
+build.rs               Windows 上嵌入图标和版本信息
+assets/                图标
 vendor/gpu-allocator/  windows 依赖固定为 0.58 的 gpu-allocator（原因见 Cargo.toml 的注释）
 scripts/package.ps1    打 Windows 发布包
+scripts/make_icon.py   生成图标（克拉尼沙纹）
 .claude/skills/        本项目的 Claude Code skill（stv-trim-prose：清理注释和文档里多余的句子）
 ```
 
