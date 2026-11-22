@@ -1,4 +1,4 @@
-# stv · speak to video
+# stv · chladni
 
 <p align="center"><img src="assets/demo.gif" width="400" alt="铺满沙子的方板随音乐聚成一个个对称图案"></p>
 
