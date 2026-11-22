@@ -142,16 +142,6 @@ impl Analyzer {
         (40.0, (self.sample_rate * 0.5).min(16000.0))
     }
 
-    /// 用第一段有声音的音频直接设定模态权重（导出时预热用）。
-    pub fn prime(&mut self, samples: &[f32], p: &Params) -> AnalysisFrame {
-        let mut f = self.process(samples, 10.0, p);
-        self.drive = 0.0;
-        self.kick = 0.0;
-        f.drive = 0.0;
-        f.kick = 0.0;
-        f
-    }
-
     /// 分析一段音频窗口。`samples` 取最后 FFT_SIZE 个样本（不足则前面补零），
     /// `dt` 为距上次分析的时间（秒）。
     pub fn process(&mut self, samples: &[f32], dt: f32, p: &Params) -> AnalysisFrame {
@@ -338,7 +328,8 @@ mod tests {
         let mut a = Analyzer::new(48000, &modes, &p);
         let target = &modes.modes[modes.len() / 2];
         let s = sine(target.freq, 48000.0, FFT_SIZE);
-        let f = a.prime(&s, &p);
+        // dt 取得很大，平滑一步到位
+        let f = a.process(&s, 10.0, &p);
         let best = f
             .weights
             .iter()

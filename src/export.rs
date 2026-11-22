@@ -10,9 +10,9 @@ use std::time::Instant;
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::analysis::{AnalysisFrame, Analyzer, FFT_SIZE};
+use crate::analysis::{Analyzer, FFT_SIZE};
 use crate::audio::{decode, live::window_centered};
-use crate::gpu::{steps_for, HeadlessGpu, Simulator, STEPS_PER_SECOND};
+use crate::gpu::{steps_for, HeadlessGpu, Simulator};
 use crate::modes::ModeSet;
 use crate::params::Params;
 
@@ -50,8 +50,6 @@ pub struct ExportSettings {
     pub codec: Codec,
     /// 质量（CRF / CQ，越小越好，默认 18）。
     pub quality: u32,
-    /// 预热秒数：开始前让沙粒先按第一段声音成形。
-    pub warmup: f32,
     /// 从音频的第几秒开始。
     pub start: f32,
     /// 导出时长（秒），None 表示到结尾。
@@ -143,45 +141,9 @@ pub fn export(settings: &ExportSettings, params: &Params, progress: &Progress) -
     let gpu = HeadlessGpu::new()?;
     let modes = ModeSet::build(&p);
     let mut analyzer = Analyzer::new(ANALYSIS_SR, &modes, &p);
+    // 沙粒初始均匀铺满整块板，视频从这里开始
     let mut sim = Simulator::new(&gpu.device, &gpu.queue, width, height, &p, false);
     let mut window = vec![0.0f32; FFT_SIZE];
-
-    // ---- 预热：用第一段有声音的音频让沙粒提前成形 ----
-    if settings.warmup > 0.0 {
-        progress.set_stage("预热沙盘…");
-        let s0 = (start * sr) as usize;
-        let s1 = ((start + dur) * sr) as usize;
-        let gate = 10f32.powf(p.gate_db / 20.0) * 2.0;
-        let mut center = None;
-        let mut i = s0;
-        while i + 1024 <= s1.min(mono.len()) {
-            let rms = (mono[i..i + 1024].iter().map(|x| x * x).sum::<f32>() / 1024.0).sqrt();
-            if rms > gate {
-                center = Some(i + FFT_SIZE / 2);
-                break;
-            }
-            i += 1024;
-        }
-        if let Some(c) = center {
-            window_centered(&mono, c as isize, &mut window);
-            let primed = analyzer.prime(&window, &p);
-            sim.set_modes(&gpu.queue, p.shape, &modes.gpu_modes(&primed.weights));
-            let warm = AnalysisFrame {
-                drive: 0.85,
-                ..primed
-            };
-            let mut steps_left = (settings.warmup * STEPS_PER_SECOND * p.speed) as u32;
-            while steps_left > 0 {
-                let n = steps_left.min(64);
-                let mut enc = gpu
-                    .device
-                    .create_command_encoder(&eframe::egui_wgpu::wgpu::CommandEncoderDescriptor { label: Some("stv.warmup") });
-                sim.encode_step(&gpu.queue, &mut enc, &warm, &p, n);
-                gpu.queue.submit(Some(enc.finish()));
-                steps_left -= n;
-            }
-        }
-    }
 
     // ---- 启动 ffmpeg ----
     if settings.codec == Codec::Auto {

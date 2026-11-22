@@ -122,7 +122,6 @@ struct ExportPrefs {
     fps: u32,
     codec: Codec,
     quality: u32,
-    warmup: f32,
 }
 
 impl Default for ExportPrefs {
@@ -134,7 +133,6 @@ impl Default for ExportPrefs {
             fps: 30,
             codec: Codec::Auto,
             quality: 18,
-            warmup: 1.5,
         }
     }
 }
@@ -601,7 +599,6 @@ impl StvApp {
             fps: self.export.fps,
             codec: self.export.codec,
             quality: self.export.quality,
-            warmup: self.export.warmup,
             start: 0.0,
             duration: None,
         };
@@ -885,7 +882,6 @@ impl StvApp {
                     }
                 });
                 ui.add(egui::Slider::new(&mut e.quality, 10..=35).text("质量 CRF/CQ（小=清晰）"));
-                ui.add(egui::Slider::new(&mut e.warmup, 0.0..=5.0).text("预热 s"));
 
                 if let Some(job) = &self.job {
                     let pg = &job.progress;

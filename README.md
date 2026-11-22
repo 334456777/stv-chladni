@@ -99,7 +99,6 @@ stv render in.wav --config my.json
 | `--width/--height/--fps` | 输出尺寸与帧率 |
 | `--codec auto\|nvenc\|x264` | 编码器，默认自动 |
 | `--quality` | CRF/CQ，越小越清晰（默认 18） |
-| `--warmup` | 预热秒数：开始前让沙粒先按第一段声音成形（默认 1.5，0 关闭） |
 | `--start/--duration` | 截取音频片段 |
 | `--preset sand\|gold\|ice\|mint` | 风格预设 |
 | `--shape square\|circle` | 振动板形状 |

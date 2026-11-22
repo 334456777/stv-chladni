@@ -80,9 +80,6 @@ struct RenderArgs {
     /// 质量 CRF/CQ（越小越清晰）
     #[arg(long, default_value_t = 18)]
     quality: u32,
-    /// 预热秒数（开始前让沙粒先按第一段声音成形，0 关闭）
-    #[arg(long, default_value_t = 1.5)]
-    warmup: f32,
     /// 起始时间（秒）
     #[arg(long, default_value_t = 0.0)]
     start: f32,
@@ -170,7 +167,6 @@ fn render(a: RenderArgs) -> Result<()> {
         fps: a.fps,
         codec: a.codec,
         quality: a.quality,
-        warmup: a.warmup,
         start: a.start,
         duration: a.duration,
     };
