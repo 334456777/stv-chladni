@@ -1,6 +1,7 @@
 //! 图形界面：实时预览（麦克风 / 文件播放）+ 参数调节 + 实时录制 + 后台导出视频。
 
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread::JoinHandle;
@@ -205,7 +206,7 @@ struct StvApp {
 
     export: ExportPrefs,
     job: Option<ExportJob>,
-    export_msg: Option<(bool, String)>,
+    export_msg: Option<Outcome>,
     status: Option<String>,
 
     // 实时录制
@@ -215,7 +216,30 @@ struct StvApp {
     recorder: Option<Recorder>,
     grabber: Option<FrameGrabber>,
     rec_finish: Option<JoinHandle<Result<PathBuf>>>,
-    rec_msg: Option<(bool, String)>,
+    rec_msg: Option<Outcome>,
+}
+
+/// 录制或导出的结果，显示在对应区域下方。
+enum Outcome {
+    /// 说明文字和保存好的文件
+    Saved(String, PathBuf),
+    Failed(String),
+}
+
+impl Outcome {
+    fn show(&self, ui: &mut egui::Ui) {
+        match self {
+            Outcome::Saved(text, file) => {
+                ui.label(RichText::new(format!("{text}\n{}", file.display())).color(GREEN));
+                if ui.button("打开所在文件夹").clicked() {
+                    reveal(file);
+                }
+            }
+            Outcome::Failed(text) => {
+                ui.label(RichText::new(text).color(RED));
+            }
+        }
+    }
 }
 
 impl StvApp {
@@ -455,7 +479,7 @@ impl StvApp {
                 self.recorder = Some(r);
                 self.rec_msg = None;
             }
-            Err(e) => self.rec_msg = Some((false, format!("开始录制失败：{e:#}"))),
+            Err(e) => self.rec_msg = Some(Outcome::Failed(format!("开始录制失败：{e:#}"))),
         }
     }
 
@@ -502,9 +526,9 @@ impl StvApp {
         if self.rec_finish.as_ref().is_some_and(|h| h.is_finished()) {
             let h = self.rec_finish.take().unwrap();
             self.rec_msg = Some(match h.join() {
-                Ok(Ok(path)) => (true, format!("录像已保存\n{}", path.display())),
-                Ok(Err(e)) => (false, format!("录制失败：{e:#}")),
-                Err(_) => (false, "录制线程崩溃".into()),
+                Ok(Ok(path)) => Outcome::Saved("录像已保存".into(), path),
+                Ok(Err(e)) => Outcome::Failed(format!("录制失败：{e:#}")),
+                Err(_) => Outcome::Failed("录制线程崩溃".into()),
             });
         }
     }
@@ -551,15 +575,8 @@ impl StvApp {
                 } else if ui.button(RichText::new("● 开始录制").strong()).clicked() {
                     self.start_recording();
                 }
-                if let Some((ok, msg)) = &self.rec_msg {
-                    ui.label(RichText::new(msg).color(if *ok { GREEN } else { RED }));
-                    if *ok {
-                        if let Some(dir) = PathBuf::from(msg.lines().last().unwrap_or_default()).parent() {
-                            if ui.button("打开所在文件夹").clicked() {
-                                let _ = std::process::Command::new("explorer").arg(dir).spawn();
-                            }
-                        }
-                    }
+                if let Some(msg) = &self.rec_msg {
+                    msg.show(ui);
                 }
             });
     }
@@ -568,7 +585,7 @@ impl StvApp {
 
     fn start_export(&mut self) {
         let Some(input) = self.file_path.clone() else {
-            self.export_msg = Some((false, "请先打开一个音频文件".into()));
+            self.export_msg = Some(Outcome::Failed("请先打开一个音频文件".into()));
             return;
         };
         let output = if self.export.output.trim().is_empty() {
@@ -608,18 +625,12 @@ impl StvApp {
         if self.job.as_ref().is_some_and(|j| j.handle.is_finished()) {
             let job = self.job.take().unwrap();
             self.export_msg = Some(match job.handle.join() {
-                Ok(Ok(s)) => (
-                    true,
-                    format!(
-                        "已导出 {} 帧，用时 {:.1}s（{}）\n{}",
-                        s.frames,
-                        s.seconds,
-                        s.encoder,
-                        job.output.display()
-                    ),
+                Ok(Ok(s)) => Outcome::Saved(
+                    format!("已导出 {} 帧，用时 {:.1}s（{}）", s.frames, s.seconds, s.encoder),
+                    job.output,
                 ),
-                Ok(Err(e)) => (false, format!("导出失败：{e:#}")),
-                Err(_) => (false, "导出线程崩溃".into()),
+                Ok(Err(e)) => Outcome::Failed(format!("导出失败：{e:#}")),
+                Err(_) => Outcome::Failed("导出线程崩溃".into()),
             });
         }
     }
@@ -904,16 +915,8 @@ impl StvApp {
                         self.start_export();
                     }
                 }
-                if let Some((ok, msg)) = &self.export_msg {
-                    let color = if *ok { GREEN } else { RED };
-                    ui.label(RichText::new(msg).color(color));
-                    if *ok {
-                        if let Some(dir) = PathBuf::from(msg.lines().last().unwrap_or_default()).parent() {
-                            if ui.button("打开所在文件夹").clicked() {
-                                let _ = std::process::Command::new("explorer").arg(dir).spawn();
-                            }
-                        }
-                    }
+                if let Some(msg) = &self.export_msg {
+                    msg.show(ui);
                 }
             });
     }
@@ -1165,6 +1168,45 @@ fn preview_size(w: u32, h: u32) -> (u32, u32) {
 fn default_output(input: &Path) -> PathBuf {
     let stem = input.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "out".into());
     input.with_file_name(format!("{stem}_stv.mp4"))
+}
+
+/// 打开 `file` 所在的文件夹并选中它；文件已被移走时只打开文件夹。
+fn reveal(file: &Path) {
+    let file = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
+    let mut cmd;
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd = std::process::Command::new("explorer");
+        if file.is_file() {
+            // explorer 自己解析命令行：整个参数加引号时认不出 /select，只能给路径单独加引号
+            let mut arg = std::ffi::OsString::from("/select,\"");
+            arg.push(file.as_os_str());
+            arg.push("\"");
+            cmd.raw_arg(arg);
+        } else if let Some(dir) = file.parent() {
+            cmd.arg(dir);
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        cmd = std::process::Command::new("open");
+        if file.is_file() {
+            cmd.arg("-R").arg(&file);
+        } else if let Some(dir) = file.parent() {
+            cmd.arg(dir);
+        }
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        cmd = std::process::Command::new("xdg-open");
+        cmd.arg(file.parent().unwrap_or(Path::new(".")));
+    }
+    // 双击启动时 main 释放了控制台，继承来的标准句柄已失效，不显式置空 spawn 会失败（os error 50）
+    cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    if let Err(e) = cmd.spawn() {
+        log::warn!("无法打开文件夹 {}：{e}", file.display());
+    }
 }
 
 fn fmt_time(s: f32) -> String {
