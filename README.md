@@ -1,5 +1,7 @@
 # stv · speak to video
 
+<p align="center"><img src="assets/demo.gif" width="400" alt="铺满沙子的方板随音乐聚成一个个对称图案"></p>
+
 把声音变成"沙粒在振动板上跳动形成的克拉尼纹路"。GPU 实时模拟，支持：
 
 - **实时画面**：打开即监听麦克风，也可边播放音频文件边显示
@@ -155,7 +157,7 @@ src/
   record.rs        实时录制（读回画面 → ffmpeg，可选混入声音）
   gui.rs           egui 界面
 build.rs               Windows 上嵌入图标和版本信息
-assets/                图标
+assets/                图标、README 演示动图
 vendor/gpu-allocator/  windows 依赖固定为 0.58 的 gpu-allocator（原因见 Cargo.toml 的注释）
 scripts/package.ps1    打 Windows 发布包
 scripts/make_icon.py   生成图标（克拉尼沙纹）
