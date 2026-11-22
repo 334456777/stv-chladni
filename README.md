@@ -27,12 +27,14 @@
 
 ## 下载
 
-Windows x64 版本见 [Releases](https://github.com/334456777/stv-chladni/releases)：解压后双击 `stv.exe`，无需另装 VC++ 运行库。
+Windows x64 版本见 [Releases](https://github.com/334456777/stv-chladni/releases)：解压后双击 `stv.exe`。
+发布包自带 ffmpeg（`ffmpeg\` 文件夹），也已静态链接 VC++ 运行库，不用另装。
 
 ## 依赖
 
 - Rust（stable）
-- [ffmpeg](https://ffmpeg.org/download.html)：用于解码任意音频/视频和编码输出。需在 PATH 中，或设置环境变量 `STV_FFMPEG` 指向 ffmpeg 可执行文件。
+- [ffmpeg](https://ffmpeg.org/download.html)：用于解码任意音频/视频和编码输出。依次查找环境变量 `STV_FFMPEG`、
+  stv.exe 旁边的 `ffmpeg\ffmpeg.exe` 或 `ffmpeg.exe`、PATH 中的 `ffmpeg`。
   只用麦克风实时画面时不需要；找不到 ffmpeg 时界面顶部会提示。
 - 支持 DX12 / Vulkan / Metal 的显卡。界面在 Windows 上优先使用 DX12（部分驱动的 Vulkan 交换链不遵守垂直同步，会导致拖动窗口滞后）。
   有 NVIDIA 显卡时自动使用 `h264_nvenc`，否则回退到 `libx264`。
@@ -42,6 +44,14 @@ Windows x64 版本见 [Releases](https://github.com/334456777/stv-chladni/releas
 ```bash
 cargo build --release
 ```
+
+打 Windows 发布包（编译 release，并把 PATH 中的 ffmpeg 连同 DLL 和许可放进 `ffmpeg\`）：
+
+```bash
+pwsh -File scripts/package.ps1
+```
+
+输出在 `target\dist`；用 `-Ffmpeg <ffmpeg.exe 路径>` 指定别的 ffmpeg 构建。
 
 可执行文件位于 `target/release/stv(.exe)`。
 
@@ -138,5 +148,11 @@ src/
   record.rs        实时录制（读回画面 → ffmpeg，可选混入声音）
   gui.rs           egui 界面
 vendor/gpu-allocator/  windows 依赖固定为 0.58 的 gpu-allocator（原因见 Cargo.toml 的注释）
+scripts/package.ps1    打 Windows 发布包
 .claude/skills/        本项目的 Claude Code skill（stv-trim-prose：清理注释和文档里多余的句子）
 ```
+
+## 许可
+
+stv 以 [MIT](LICENSE) 许可发布。发布包里的 `ffmpeg\` 是独立的 FFmpeg 程序，stv 只是启动它，
+它按自己的许可（目前随附的构建为 GPLv3）分发，许可文本和源码地址见该文件夹里的 LICENSE 与 README.txt。
