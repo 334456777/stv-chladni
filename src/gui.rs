@@ -1048,7 +1048,7 @@ impl eframe::App for StvApp {
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing.x = 0.0;
                         ui.hyperlink_to("下载 ffmpeg", crate::audio::decode::FFMPEG_URL);
-                        ui.label("，把 ffmpeg.exe 所在目录加入 PATH 或设置环境变量 STV_FFMPEG，然后重启 stv。");
+                        ui.label("，把 ffmpeg.exe 放到 stv.exe 旁边、加入 PATH 或设置环境变量 STV_FFMPEG，然后重启 stv。");
                     });
                 }
                 if let Some(s) = &self.status {

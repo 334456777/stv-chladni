@@ -11,11 +11,26 @@ pub const FFMPEG_URL: &str = "https://ffmpeg.org/download.html";
 
 static FOUND: OnceLock<bool> = OnceLock::new();
 
-/// ffmpeg 可执行文件路径：优先环境变量 `STV_FFMPEG`，否则使用 PATH 中的 `ffmpeg`。
+/// ffmpeg 可执行文件路径，依次查找：环境变量 `STV_FFMPEG`；stv 可执行文件旁边的
+/// `ffmpeg/ffmpeg.exe`（发布包自带）或 `ffmpeg.exe`；PATH 中的 `ffmpeg`。
 pub fn ffmpeg_bin() -> PathBuf {
-    std::env::var_os("STV_FFMPEG")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("ffmpeg"))
+    static BIN: OnceLock<PathBuf> = OnceLock::new();
+    BIN.get_or_init(|| {
+        std::env::var_os("STV_FFMPEG")
+            .map(PathBuf::from)
+            .or_else(bundled_ffmpeg)
+            .unwrap_or_else(|| PathBuf::from("ffmpeg"))
+    })
+    .clone()
+}
+
+fn bundled_ffmpeg() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+    let name = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
+    [dir.join("ffmpeg").join(name), dir.join(name)]
+        .into_iter()
+        .find(|p| p.is_file())
 }
 
 /// 创建一个不弹出控制台窗口的 ffmpeg 命令。
@@ -35,7 +50,7 @@ pub fn spawn_error(e: std::io::Error) -> anyhow::Error {
     let bin = ffmpeg_bin();
     if e.kind() == std::io::ErrorKind::NotFound {
         anyhow!(
-            "找不到 ffmpeg（{}）：请安装 ffmpeg（{FFMPEG_URL}）并把所在目录加入 PATH，或用环境变量 STV_FFMPEG 指向 ffmpeg.exe",
+            "找不到 ffmpeg（{}）：请下载 ffmpeg（{FFMPEG_URL}），把 ffmpeg.exe 放到 stv.exe 旁边或加入 PATH，也可以用环境变量 STV_FFMPEG 指向它",
             bin.display()
         )
     } else {
