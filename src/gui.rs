@@ -27,6 +27,7 @@ const MAX_UI_FPS: f32 = 165.0;
 const BOTTOM_GAP: f32 = 18.0;
 const RED: Color32 = Color32::from_rgb(235, 120, 110);
 const GREEN: Color32 = Color32::from_rgb(140, 210, 140);
+const YELLOW: Color32 = Color32::from_rgb(232, 196, 104);
 const MEDIA_EXTS: &[&str] = &[
     "wav", "mp3", "flac", "ogg", "opus", "m4a", "aac", "wma", "aiff", "aif", "mp4", "mov", "mkv", "webm", "avi",
 ];
@@ -256,10 +257,12 @@ impl StvApp {
         let info = rs.adapter.get_info();
         let adapter = format!("{} · {:?}", info.name, info.backend);
         let is_nvidia = info.vendor == 0x10DE;
-        if is_nvidia {
-            // 提前在后台探测 NVENC，避免第一次录制时卡顿
-            std::thread::spawn(crate::audio::decode::nvenc_works);
-        }
+        // 在后台检测 ffmpeg（找不到时面板顶部提示）；有 NVIDIA 显卡时再探测 NVENC，避免第一次录制时卡顿
+        std::thread::spawn(move || {
+            if crate::audio::decode::ffmpeg_found() && is_nvidia {
+                crate::audio::decode::nvenc_works();
+            }
+        });
         let modes = ModeSet::build(&params);
         let analyzer = Analyzer::new(48_000, &modes, &params);
         let (pw, ph) = preview_size(export.width, export.height);
@@ -1040,6 +1043,14 @@ impl eframe::App for StvApp {
                     ui.label(RichText::new("stv").size(22.0).strong());
                     ui.label(RichText::new("speak to video").weak());
                 });
+                if crate::audio::decode::ffmpeg_found_cached() == Some(false) {
+                    ui.label(RichText::new("未找到 ffmpeg：打开音频 / 视频、录制和导出都需要它。").color(YELLOW));
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        ui.hyperlink_to("下载 ffmpeg", crate::audio::decode::FFMPEG_URL);
+                        ui.label("，把 ffmpeg.exe 所在目录加入 PATH 或设置环境变量 STV_FFMPEG，然后重启 stv。");
+                    });
+                }
                 if let Some(s) = &self.status {
                     ui.label(RichText::new(s).color(RED));
                 }

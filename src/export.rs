@@ -212,9 +212,7 @@ pub fn export(settings: &ExportSettings, params: &Params, progress: &Progress) -
     .stdout(Stdio::null())
     .stderr(Stdio::piped());
 
-    let mut child = cmd
-        .spawn()
-        .with_context(|| format!("无法启动 ffmpeg（{}）", decode::ffmpeg_bin().display()))?;
+    let mut child = cmd.spawn().map_err(decode::spawn_error)?;
     let mut stdin = child.stdin.take().context("ffmpeg stdin 不可用")?;
     let mut stderr = child.stderr.take().context("ffmpeg stderr 不可用")?;
     let err_thread = std::thread::spawn(move || {

@@ -4,7 +4,12 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Result};
+
+/// ffmpeg 的下载地址，界面提示和报错都用它。
+pub const FFMPEG_URL: &str = "https://ffmpeg.org/download.html";
+
+static FOUND: OnceLock<bool> = OnceLock::new();
 
 /// ffmpeg 可执行文件路径：优先环境变量 `STV_FFMPEG`，否则使用 PATH 中的 `ffmpeg`。
 pub fn ffmpeg_bin() -> PathBuf {
@@ -25,6 +30,37 @@ pub fn ffmpeg_command() -> Command {
     cmd
 }
 
+/// 启动 ffmpeg 失败时的错误；找不到程序时说明怎么安装。
+pub fn spawn_error(e: std::io::Error) -> anyhow::Error {
+    let bin = ffmpeg_bin();
+    if e.kind() == std::io::ErrorKind::NotFound {
+        anyhow!(
+            "找不到 ffmpeg（{}）：请安装 ffmpeg（{FFMPEG_URL}）并把所在目录加入 PATH，或用环境变量 STV_FFMPEG 指向 ffmpeg.exe",
+            bin.display()
+        )
+    } else {
+        anyhow!("无法启动 ffmpeg（{}）：{e}", bin.display())
+    }
+}
+
+/// ffmpeg 能否运行。第一次调用会运行一次 `ffmpeg -version`，结果缓存到进程结束。
+pub fn ffmpeg_found() -> bool {
+    *FOUND.get_or_init(|| {
+        ffmpeg_command()
+            .arg("-version")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+    })
+}
+
+/// [`ffmpeg_found`] 已检测过时返回结果；还没检测时返回 `None`，不阻塞。
+pub fn ffmpeg_found_cached() -> Option<bool> {
+    FOUND.get().copied()
+}
+
 /// 把文件解码为交错的 f32 PCM。
 pub fn decode(path: &Path, sample_rate: u32, channels: u16) -> Result<Vec<f32>> {
     let output = ffmpeg_command()
@@ -39,7 +75,7 @@ pub fn decode(path: &Path, sample_rate: u32, channels: u16) -> Result<Vec<f32>> 
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
-        .with_context(|| format!("无法启动 ffmpeg（{}），请确认已安装并在 PATH 中，或设置 STV_FFMPEG", ffmpeg_bin().display()))?;
+        .map_err(spawn_error)?;
     if !output.status.success() {
         bail!(
             "ffmpeg 解码失败：{}",

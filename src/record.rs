@@ -68,7 +68,7 @@ impl Recorder {
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
-            .with_context(|| format!("无法启动 ffmpeg（{}）", decode::ffmpeg_bin().display()))?;
+            .map_err(decode::spawn_error)?;
         let mut stdin = child.stdin.take().context("ffmpeg stdin 不可用")?;
         let mut stderr = child.stderr.take().context("ffmpeg stderr 不可用")?;
 
@@ -179,7 +179,8 @@ impl Recorder {
                         .arg(&self.output)
                         .stdin(Stdio::null())
                         .output()
-                        .context("无法启动 ffmpeg 合成声音")?;
+                        .map_err(decode::spawn_error)
+                        .context("合成声音失败")?;
                     let _ = std::fs::remove_file(&wav);
                     if !out.status.success() {
                         bail!("合成声音失败：{}", String::from_utf8_lossy(&out.stderr).trim());
