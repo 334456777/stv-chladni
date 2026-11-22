@@ -1,6 +1,6 @@
 [package]
 name = "stv"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 description = "stv (speak to video) — 把声音变成克拉尼沙粒振动纹路的 GPU 桌面程序"
 license = "MIT"
