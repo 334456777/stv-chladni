@@ -25,10 +25,15 @@
      在波腹处随机弹跳，并带少量抖动决定线宽；声音停止时沙粒静止，图案保留。
 4. **渲染**：每个沙粒一个实例化圆点，读回像素后通过管道交给 ffmpeg 编码。
 
+## 下载
+
+Windows x64 版本见 [Releases](https://github.com/334456777/stv-chladni/releases)：解压后双击 `stv.exe`，无需另装 VC++ 运行库。
+
 ## 依赖
 
 - Rust（stable）
-- [ffmpeg](https://ffmpeg.org/)：用于解码任意音频/视频和编码输出。需在 PATH 中，或设置环境变量 `STV_FFMPEG` 指向 ffmpeg 可执行文件。
+- [ffmpeg](https://ffmpeg.org/download.html)：用于解码任意音频/视频和编码输出。需在 PATH 中，或设置环境变量 `STV_FFMPEG` 指向 ffmpeg 可执行文件。
+  只用麦克风实时画面时不需要；找不到 ffmpeg 时界面顶部会提示。
 - 支持 DX12 / Vulkan / Metal 的显卡。界面在 Windows 上优先使用 DX12（部分驱动的 Vulkan 交换链不遵守垂直同步，会导致拖动窗口滞后）。
   有 NVIDIA 显卡时自动使用 `h264_nvenc`，否则回退到 `libx264`。
 
