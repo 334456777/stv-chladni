@@ -29,7 +29,7 @@
 
 ## 下载
 
-Windows 10 / 11 x64 版本见 [Releases](https://github.com/334456777/stv-chladni/releases)：解压后双击 `stv.exe`，
+转到 [Releases](https://github.com/334456777/stv-chladni/releases)：解压后双击 `stv.exe`，
 也可以把音频 / 视频文件拖到 `stv.exe` 上直接打开。
 发布包自带 ffmpeg（`ffmpeg\` 文件夹），也已静态链接 VC++ 运行库，不用另装。
 
