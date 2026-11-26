@@ -841,6 +841,48 @@ fn create_target(device: &wgpu::Device, width: u32, height: u32) -> (wgpu::Textu
     (tex, view)
 }
 
+/// 按偏好顺序逐个在适配器上创建设备，返回第一个成功的：独立显卡优先，同一块显卡上 DX12 / Metal 优先于 Vulkan
+/// （DX12 优先的原因见 `gui::select_adapter`）。
+///
+/// 某块显卡或某个后端的驱动出错时换下一个。wgpu 把 DX12 驱动返回的大多数错误都报成 "Parent device is lost"，
+/// 具体原因只写在错误日志里。全部失败时返回每个适配器各自的错误。
+pub fn open_first_device(
+    adapters: impl IntoIterator<Item = wgpu::Adapter>,
+    descriptor: impl Fn(&wgpu::Adapter) -> wgpu::DeviceDescriptor<'static>,
+) -> Result<(wgpu::Adapter, wgpu::Device, wgpu::Queue), String> {
+    let mut adapters: Vec<_> = adapters.into_iter().collect();
+    adapters.sort_by_key(|a| {
+        let info = a.get_info();
+        let device = match info.device_type {
+            wgpu::DeviceType::DiscreteGpu => 3,
+            wgpu::DeviceType::IntegratedGpu => 2,
+            wgpu::DeviceType::VirtualGpu => 1,
+            _ => 0,
+        };
+        let backend = match info.backend {
+            wgpu::Backend::Dx12 | wgpu::Backend::Metal => 2,
+            wgpu::Backend::Vulkan => 1,
+            _ => 0,
+        };
+        std::cmp::Reverse((device, backend))
+    });
+    if adapters.is_empty() {
+        return Err("没有可用的显卡适配器".into());
+    }
+    let mut failures = Vec::new();
+    for adapter in adapters {
+        let info = adapter.get_info();
+        match pollster::block_on(adapter.request_device(&descriptor(&adapter), None)) {
+            Ok((device, queue)) => return Ok((adapter, device, queue)),
+            Err(e) => {
+                log::warn!("{} · {:?} 无法创建 GPU 设备：{e}", info.name, info.backend);
+                failures.push(format!("{} · {:?}：{e}", info.name, info.backend));
+            }
+        }
+    }
+    Err(format!("所有显卡适配器都无法创建 GPU 设备：\n{}", failures.join("\n")))
+}
+
 /// 无头 GPU 上下文（导出视频用）。
 pub struct HeadlessGpu {
     pub device: wgpu::Device,
@@ -855,23 +897,16 @@ impl HeadlessGpu {
             backends: wgpu::Backends::PRIMARY,
             ..Default::default()
         });
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            force_fallback_adapter: false,
-            compatible_surface: None,
-        }))
-        .context("找不到可用的 GPU 适配器")?;
-        let info = adapter.get_info();
-        let (device, queue) = pollster::block_on(adapter.request_device(
-            &wgpu::DeviceDescriptor {
-                label: Some("stv.headless"),
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
-                memory_hints: wgpu::MemoryHints::Performance,
-            },
-            None,
-        ))
+        let adapters = instance.enumerate_adapters(wgpu::Backends::PRIMARY);
+        let (adapter, device, queue) = open_first_device(adapters, |adapter| wgpu::DeviceDescriptor {
+            label: Some("stv.headless"),
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
+            memory_hints: wgpu::MemoryHints::Performance,
+        })
+        .map_err(anyhow::Error::msg)
         .context("创建 GPU 设备失败")?;
+        let info = adapter.get_info();
         Ok(Self {
             device,
             queue,

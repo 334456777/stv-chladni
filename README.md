@@ -42,7 +42,8 @@
 - [ffmpeg](https://ffmpeg.org/download.html)：用于解码任意音频/视频和编码输出。依次查找环境变量 `STV_FFMPEG`、
   stv.exe 旁边的 `ffmpeg\ffmpeg.exe` 或 `ffmpeg.exe`、PATH 中的 `ffmpeg`。
   只用麦克风实时画面时不需要；找不到 ffmpeg 时界面顶部会提示。
-- 支持 DX12 / Vulkan / Metal 的显卡。界面在 Windows 上优先使用 DX12（部分驱动的 Vulkan 交换链不遵守垂直同步，会导致拖动窗口滞后）。
+- 支持 DX12 / Vulkan / Metal 的显卡。界面在 Windows 上优先使用 DX12（部分驱动的 Vulkan 交换链不遵守垂直同步，会导致拖动窗口滞后）；
+  某块显卡的 DX12 无法创建设备时，自动改用它的 Vulkan 或另一块显卡，都不行时启动失败的弹窗里列出各显卡的错误和错误日志。
   有 NVIDIA 显卡时自动使用 `h264_nvenc`，否则回退到 `libx264`。
 
 ## 构建
