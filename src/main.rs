@@ -13,10 +13,11 @@ mod modes;
 mod params;
 mod record;
 
+use std::collections::VecDeque;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -123,8 +124,7 @@ struct RenderArgs {
 
 fn main() {
     attach_parent_console();
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn,wgpu_core=error,wgpu_hal=error,naga=warn"))
-        .init();
+    init_logger();
     let cli = Cli::parse();
     let gui_mode = matches!(cli.cmd, None | Some(Cmd::Gui { .. }));
     if gui_mode {
@@ -153,14 +153,58 @@ fn main() {
         eprintln!("错误：{e:#}");
         if gui_mode {
             // 双击启动时没有终端，只能弹窗告诉用户
+            let mut text = format!("{e:#}");
+            let errors = ERROR_LOG.lock().map(|l| l.iter().cloned().collect::<Vec<_>>()).unwrap_or_default();
+            if !errors.is_empty() {
+                text.push_str("\n\n错误日志：\n");
+                text.push_str(&errors.join("\n"));
+            }
             rfd::MessageDialog::new()
                 .set_level(rfd::MessageLevel::Error)
                 .set_title("stv")
-                .set_description(format!("{e:#}"))
+                .set_description(text)
                 .show();
         }
         std::process::exit(1);
     }
+}
+
+/// 最近的错误日志，界面启动失败时放进弹窗。窗口程序没有终端看日志，而 wgpu 只在日志里写出驱动返回的具体错误。
+static ERROR_LOG: Mutex<VecDeque<String>> = Mutex::new(VecDeque::new());
+const ERROR_LOG_LEN: usize = 16;
+
+/// env_logger 照常输出到标准错误，同时把错误级别的日志记进 `ERROR_LOG`。
+struct Logger(env_logger::Logger);
+
+impl log::Log for Logger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        self.0.enabled(metadata)
+    }
+
+    fn log(&self, record: &log::Record) {
+        if record.level() == log::Level::Error && self.0.matches(record) {
+            if let Ok(mut errors) = ERROR_LOG.lock() {
+                if errors.len() == ERROR_LOG_LEN {
+                    errors.pop_front();
+                }
+                errors.push_back(record.args().to_string());
+            }
+        }
+        self.0.log(record);
+    }
+
+    fn flush(&self) {
+        self.0.flush();
+    }
+}
+
+fn init_logger() {
+    let logger = env_logger::Builder::from_env(
+        env_logger::Env::default().default_filter_or("warn,wgpu_core=error,wgpu_hal=error,naga=warn"),
+    )
+    .build();
+    log::set_max_level(logger.filter());
+    let _ = log::set_boxed_logger(Box::new(Logger(logger)));
 }
 
 fn render(a: RenderArgs) -> Result<()> {

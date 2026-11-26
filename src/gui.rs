@@ -46,6 +46,13 @@ pub struct Launch {
 }
 
 pub fn run(launch: Launch) -> Result<()> {
+    let device_descriptor = egui_wgpu::WgpuSetupCreateNew::default().device_descriptor;
+    let selector: egui_wgpu::NativeAdapterSelectorMethod = {
+        let descriptor = device_descriptor.clone();
+        Arc::new(move |adapters: &[wgpu::Adapter], surface: Option<&wgpu::Surface<'_>>| {
+            select_adapter(adapters, surface, &*descriptor)
+        })
+    };
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("stv · speak to video")
@@ -62,7 +69,8 @@ pub fn run(launch: Launch) -> Result<()> {
                     ..Default::default()
                 },
                 power_preference: wgpu::PowerPreference::HighPerformance,
-                native_adapter_selector: Some(Arc::new(select_adapter)),
+                native_adapter_selector: Some(selector),
+                device_descriptor,
                 ..Default::default()
             }),
             ..Default::default()
@@ -81,31 +89,26 @@ pub fn run(launch: Launch) -> Result<()> {
     .map_err(|e| anyhow!("界面启动失败：{e}"))
 }
 
-/// 选择显卡适配器：优先独立显卡，其次优先 DX12。
+/// 选择显卡适配器：能显示到窗口的适配器里，按 `gpu::open_first_device` 的偏好顺序取第一个能创建设备的。
 ///
 /// 在 Windows 上，部分驱动的 Vulkan 交换链不遵守垂直同步，界面会空转到数百帧、占满主线程，
-/// 导致拖动窗口明显滞后；DX12 的翻转模型交换链能正确同步到显示器刷新率。
-fn select_adapter(adapters: &[wgpu::Adapter], surface: Option<&wgpu::Surface<'_>>) -> Result<wgpu::Adapter, String> {
-    adapters
+/// 导致拖动窗口明显滞后；DX12 的翻转模型交换链能正确同步到显示器刷新率，因此优先 DX12。
+/// eframe 只在选中的适配器上创建一次设备，失败就无法启动，所以这里先用同样的参数试建一个再释放，
+/// DX12 驱动出错时退到同一块显卡的 Vulkan 或另一块显卡。
+fn select_adapter(
+    adapters: &[wgpu::Adapter],
+    surface: Option<&wgpu::Surface<'_>>,
+    descriptor: &(dyn Fn(&wgpu::Adapter) -> wgpu::DeviceDescriptor<'static> + Send + Sync),
+) -> Result<wgpu::Adapter, String> {
+    let usable: Vec<_> = adapters
         .iter()
         .filter(|a| surface.is_none_or(|s| a.is_surface_supported(s)))
-        .max_by_key(|a| {
-            let info = a.get_info();
-            let device = match info.device_type {
-                wgpu::DeviceType::DiscreteGpu => 3,
-                wgpu::DeviceType::IntegratedGpu => 2,
-                wgpu::DeviceType::VirtualGpu => 1,
-                _ => 0,
-            };
-            let backend = match info.backend {
-                wgpu::Backend::Dx12 | wgpu::Backend::Metal => 2,
-                wgpu::Backend::Vulkan => 1,
-                _ => 0,
-            };
-            (device, backend)
-        })
         .cloned()
-        .ok_or_else(|| "没有可用于窗口显示的显卡适配器".to_string())
+        .collect();
+    if usable.is_empty() {
+        return Err("没有可用于窗口显示的显卡适配器".into());
+    }
+    crate::gpu::open_first_device(usable, descriptor).map(|(adapter, ..)| adapter)
 }
 
 enum Source {
