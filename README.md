@@ -64,6 +64,10 @@ pwsh -File scripts/package.ps1
 
 输出在 `target\dist`；用 `-Ffmpeg <ffmpeg.exe 路径>` 指定别的 ffmpeg 构建。
 
+GitHub Actions（`.github/workflows/package.yml`）在 Windows 上测试并运行同一个脚本，ffmpeg 用 gyan.dev 的 7.1.1 共享库版，
+发布包在运行记录的 Artifacts 里。推送 main、改动代码的拉取请求和 `v*` 标签都会触发；推送标签（须与 `Cargo.toml` 的版本一致，如 `v0.2.1`）
+时还会建一个附带发布包的 Release 草稿，补上说明后发布。
+
 可执行文件位于 `target/release/stv(.exe)`。
 
 ## 使用
@@ -162,6 +166,7 @@ assets/                图标、README 演示动图
 vendor/gpu-allocator/  windows 依赖固定为 0.58 的 gpu-allocator（原因见 Cargo.toml 的注释）
 scripts/package.ps1    打 Windows 发布包
 scripts/make_icon.py   生成图标（克拉尼沙纹）
+.github/workflows/     GitHub Actions：测试、打包，推送标签时建 Release 草稿
 .claude/skills/        本项目的 Claude Code skill（stv-trim-prose：清理注释和文档里多余的句子）
 ```
 
